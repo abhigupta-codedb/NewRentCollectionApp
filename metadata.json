@@ -1,0 +1,6 @@
+{
+  "name": "Rent Collection & Tenant Management",
+  "description": "Track rent collection, tenant balances, lease documents, automated WhatsApp and email reminders, and monthly income reporting with PDF receipts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

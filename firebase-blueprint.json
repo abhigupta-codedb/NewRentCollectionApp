@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "Owner": {
+      "title": "Owner",
+      "description": "Property owner profile, business details, and banking settings",
+      "type": "object",
+      "properties": {
+        "ownerName": { "type": "string", "maxLength": 120 },
+        "businessName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 300 },
+        "currencySymbol": { "type": "string", "maxLength": 5 },
+        "bankDetails": { "type": "object" },
+        "reminderSettings": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["ownerName", "businessName", "currencySymbol"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant profile, lease terms, unit, and uploaded lease documents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 150 },
+        "unit": { "type": "string", "maxLength": 80 },
+        "rentAmount": { "type": "number" },
+        "securityDeposit": { "type": "number" },
+        "dueDay": { "type": "number" },
+        "leaseStart": { "type": "string", "maxLength": 30 },
+        "leaseEnd": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["active", "notice", "vacated"] },
+        "documents": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "ownerId", "name", "phone", "unit", "rentAmount", "dueDay", "leaseStart", "leaseEnd", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Recorded rent transaction with receipt metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "receiptNumber": { "type": "string", "maxLength": 60 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "tenantName": { "type": "string", "maxLength": 120 },
+        "unit": { "type": "string", "maxLength": 80 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "maxLength": 30 },
+        "monthCovered": { "type": "string", "maxLength": 60 },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "referenceId": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["completed", "pending", "failed"] },
+        "receivedBy": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "ownerId", "receiptNumber", "tenantId", "tenantName", "amount", "date", "monthCovered", "paymentMethod", "status"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Log of WhatsApp or Email automated payment reminders sent to tenants",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "tenantName": { "type": "string", "maxLength": 120 },
+        "unit": { "type": "string", "maxLength": 80 },
+        "channel": { "type": "string", "enum": ["whatsapp", "email"] },
+        "recipientContact": { "type": "string", "maxLength": 150 },
+        "message": { "type": "string", "maxLength": 2000 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "sentAt": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["sent", "queued", "failed"] },
+        "isAutomated": { "type": "boolean" },
+        "dueDate": { "type": "string", "maxLength": 30 },
+        "amountDue": { "type": "number" }
+      },
+      "required": ["id", "ownerId", "tenantId", "tenantName", "channel", "recipientContact", "message", "sentAt", "status", "dueDate", "amountDue"]
+    }
+  },
+  "firestore": {
+    "/owners/{ownerId}": {
+      "schema": "Owner",
+      "description": "Owner settings, bank details, and notification defaults"
+    },
+    "/owners/{ownerId}/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenants owned and managed by the owner"
+    },
+    "/owners/{ownerId}/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment records and receipts for the owner's properties"
+    },
+    "/owners/{ownerId}/reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "Notification and reminder logs dispatched to the owner's tenants"
+    }
+  }
+}

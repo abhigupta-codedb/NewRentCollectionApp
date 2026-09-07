@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Lightweight connection check
+    match /test/{testId} {
+      allow get: if true;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidOwner(data, ownerId) {
+      return data.ownerName is string && data.ownerName.size() <= 120 &&
+             data.businessName is string && data.businessName.size() <= 150 &&
+             data.currencySymbol is string && data.currencySymbol.size() <= 5;
+    }
+
+    function isValidTenant(data, ownerId) {
+      return data.id is string && isValidId(data.id) &&
+             data.ownerId == ownerId && data.ownerId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.phone is string && data.phone.size() <= 30 &&
+             data.unit is string && data.unit.size() <= 80 &&
+             data.rentAmount is number && data.rentAmount >= 0 &&
+             data.dueDay is number && data.dueDay >= 1 && data.dueDay <= 31 &&
+             data.status in ['active', 'notice', 'vacated'] &&
+             data.documents is list && data.documents.size() <= 100;
+    }
+
+    function isValidPayment(data, ownerId) {
+      return data.id is string && isValidId(data.id) &&
+             data.ownerId == ownerId && data.ownerId == request.auth.uid &&
+             data.receiptNumber is string && data.receiptNumber.size() <= 60 &&
+             data.tenantId is string && isValidId(data.tenantId) &&
+             data.tenantName is string && data.tenantName.size() <= 120 &&
+             data.amount is number && data.amount >= 0 &&
+             data.paymentMethod is string && data.paymentMethod.size() <= 50 &&
+             data.status in ['completed', 'pending', 'failed'];
+    }
+
+    function isValidReminder(data, ownerId) {
+      return data.id is string && isValidId(data.id) &&
+             data.ownerId == ownerId && data.ownerId == request.auth.uid &&
+             data.tenantId is string && isValidId(data.tenantId) &&
+             data.channel in ['whatsapp', 'email'] &&
+             data.status in ['sent', 'queued', 'failed'] &&
+             data.message is string && data.message.size() <= 2000;
+    }
+
+    // Owner Account & Settings
+    match /owners/{ownerId} {
+      allow get: if isOwner(ownerId);
+      allow create, update: if isOwner(ownerId) && isValidOwner(incoming(), ownerId);
+      allow delete: if false;
+
+      // Subcollection: Tenants
+      match /tenants/{tenantId} {
+        allow get: if isOwner(ownerId) && isValidId(tenantId);
+        allow list: if isOwner(ownerId);
+        allow create: if isOwner(ownerId) && isValidId(tenantId) && isValidTenant(incoming(), ownerId);
+        allow update: if isOwner(ownerId) && isValidId(tenantId) && isValidTenant(incoming(), ownerId);
+        allow delete: if isOwner(ownerId) && isValidId(tenantId);
+      }
+
+      // Subcollection: Payments
+      match /payments/{paymentId} {
+        allow get: if isOwner(ownerId) && isValidId(paymentId);
+        allow list: if isOwner(ownerId);
+        allow create: if isOwner(ownerId) && isValidId(paymentId) && isValidPayment(incoming(), ownerId);
+        allow update: if isOwner(ownerId) && isValidId(paymentId) && isValidPayment(incoming(), ownerId);
+        allow delete: if isOwner(ownerId) && isValidId(paymentId);
+      }
+
+      // Subcollection: Reminders
+      match /reminders/{reminderId} {
+        allow get: if isOwner(ownerId) && isValidId(reminderId);
+        allow list: if isOwner(ownerId);
+        allow create: if isOwner(ownerId) && isValidId(reminderId) && isValidReminder(incoming(), ownerId);
+        allow update: if isOwner(ownerId) && isValidId(reminderId) && isValidReminder(incoming(), ownerId);
+        allow delete: if isOwner(ownerId) && isValidId(reminderId);
+      }
+    }
+  }
+}
