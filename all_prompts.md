@@ -131,3 +131,227 @@ At the end, provide:
 * A safe migration strategy or script if existing data needs aggregates populated.
 
 Do not make unrelated cosmetic changes or broad refactors. The objective is specifically to reduce Firestore reads and make the application scale efficiently while preserving current behaviour.
+
+---------------------------------------------------------------------------------------------------
+
+You are working on this repository:
+
+https://github.com/abhigupta-codedb/NewRentCollectionApp
+
+Review the latest `main` branch before making changes.
+
+The application will initially be deployed as a controlled pilot for approximately 3–10 known users. Implement only the following five essential pilot-safety fixes. Do not create a readiness dashboard, redesign the application, or perform unrelated refactoring.
+
+## 1. Remove hard-coded owner and banking information
+
+The current default settings contain hard-coded personal and financial information, including owner name, business name, phone, email, address, PAN, bank account, IFSC and UPI details.
+
+Required changes:
+
+* Replace personal and financial defaults with blank or clearly non-operational values.
+* A new owner must not inherit another landlord’s contact or payment information.
+* It is acceptable to populate the owner name and email from the authenticated Google profile.
+* Do not automatically populate phone, address, PAN, account number, IFSC, UPI ID or UPI number.
+* Introduce a clear “Complete your settings” state for newly registered owners.
+* Prevent reminders containing payment instructions from being generated until the necessary bank/UPI information is completed.
+* Prevent a final receipt from being generated when essential landlord information required by the receipt is missing.
+* Display a clear validation message directing the owner to Settings.
+* Do not treat PAN as universally mandatory; validate it only where the existing receipt workflow actually requires it.
+
+Acceptance criteria:
+
+* A new Google user starts with blank banking and UPI fields.
+* No data belonging to the current sample/default owner appears in a new account.
+* The application does not produce reminders containing another person’s banking details.
+* The user receives a clear message when required settings are incomplete.
+
+## 2. Confirm Firestore payment saving before success or receipt generation
+
+The current payment modal can close and download a receipt before the asynchronous Firestore write has succeeded.
+
+Required changes:
+
+* Change the payment submission flow to:
+
+  `Submit → wait for Firestore → confirm success → generate/download receipt → close modal`
+
+* Make the payment callback return `Promise<void>`.
+
+* Await the callback inside the payment modal.
+
+* Add a submitting/loading state.
+
+* Disable repeated submission while the payment is being saved.
+
+* If Firestore fails:
+
+  * Keep the modal open.
+  * Do not generate or download a receipt.
+  * Do not show a success animation.
+  * Display a clear retryable error message.
+
+* Trigger the success animation and optional PDF download only after Firestore confirms the write.
+
+* Ensure demo mode continues to work using the same success/error contract.
+
+* Avoid duplicate payment creation if the user clicks multiple times.
+
+Acceptance criteria:
+
+* A receipt cannot be produced for a payment that failed to save.
+* The modal closes only after a successful save.
+* Double-clicking Submit creates only one payment.
+* Failed writes show a useful error and preserve the entered form data.
+
+## 3. Correct misleading automated-reminder behaviour
+
+The existing batch reminder function creates reminder logs but does not actually send WhatsApp or email messages. The interface must not claim that these messages were sent.
+
+Required changes:
+
+* Do not describe the current batch function as automatic sending.
+* For the authenticated pilot:
+
+  * Hide or disable the batch-send button until a real delivery provider is integrated.
+  * Explain briefly that individual WhatsApp/email actions open the relevant application for manual sending.
+* Demo mode may retain a simulation only if it is clearly labelled “Simulation” or “Preview”.
+* Remove messages claiming that batch reminders were “successfully sent”.
+* Individual WhatsApp/email actions should not immediately record a reminder as `sent`.
+* Because the application cannot detect whether the user completed sending in WhatsApp or their email client, record the action as `queued` or equivalent.
+* Update visible status labels so that `queued` is not displayed as successfully delivered.
+* Do not introduce WhatsApp Business API, SMTP, SendGrid or another paid service as part of this task.
+
+Acceptance criteria:
+
+* The application never claims a reminder was delivered when it only opened an external composer.
+* Batch simulation is unavailable or unmistakably identified in authenticated pilot mode.
+* Manual reminder logs use an accurate status.
+* Existing reminder history continues to load correctly.
+
+## 4. Restrict the pilot to approved users
+
+Google Authentication currently allows any Google account to initialize an owner profile. Implement a secure server-enforced pilot allowlist.
+
+Recommended Firestore structure:
+
+```text
+/pilotUsers/{email}
+  enabled: true
+```
+
+The document ID may be the exact normalized email address used by Firebase Authentication.
+
+Required changes:
+
+* Do not implement the allowlist only through frontend environment variables or client-side JavaScript.
+* Add a Firestore rules helper such as `isPilotUser()`.
+* Require both:
+
+  * The authenticated UID matches the owner path.
+  * The authenticated email has an enabled pilot allowlist record.
+* Client users must never be able to create, edit, list or delete allowlist records.
+* An authenticated user may only check their own allowlist record.
+* Perform the pilot-access check before initializing an owner profile or starting owner data subscriptions.
+* If the account is not allowlisted:
+
+  * Do not create an owner document.
+  * Do not create tenants, payments or reminder collections.
+  * Sign the user out or prevent entry to the app.
+  * Show a friendly “This account has not been invited to the pilot” message.
+* Document exactly how the administrator adds an approved email through the Firebase Console.
+* Handle missing or malformed authentication email claims safely.
+* Email matching must be deterministic; document whether allowlist document IDs must be lowercase.
+
+Acceptance criteria:
+
+* An unauthenticated user cannot access owner data.
+* An authenticated but non-allowlisted user cannot create or access owner data.
+* An allowlisted user can access only their own owner path.
+* Allowlisted User A cannot read or write User B’s data.
+* No client can modify the pilot allowlist.
+
+## 5. Make Firestore rules and indexes reproducibly deployable and tested
+
+The repository contains `firestore.rules` and `firestore.indexes.json`, but deployment to the exact named Firestore database must be reproducible.
+
+The configured database ID is currently:
+
+```text
+ai-studio-rentcollectionte-16e1cfd4-fb8a-4c0f-9c7b-709974b30276
+```
+
+Required changes:
+
+* Add or correct the Firebase CLI configuration needed to deploy:
+
+  * Firestore security rules
+  * Firestore composite indexes
+* Ensure deployment targets the intended Firebase project and the exact named Firestore database rather than accidentally targeting the default database.
+* Do not overwrite rules for an unrelated database.
+* Document the commands required for deployment.
+* Add automated Firestore Rules tests using the Firebase Emulator Suite.
+* At minimum, test:
+
+  * Unauthenticated owner read is rejected.
+  * Non-allowlisted authenticated user is rejected.
+  * Allowlisted owner can read/write their own valid data.
+  * Cross-owner tenant access is rejected.
+  * Cross-owner payment creation is rejected.
+  * Cross-owner reminder access is rejected.
+  * Client modification of the allowlist is rejected.
+  * Invalid or oversized core fields are rejected.
+* Confirm that the existing composite indexes support:
+
+  * Tenant payments ordered by date.
+  * Tenant reminders ordered by sent timestamp.
+* Add concise setup documentation for:
+
+  * Enabling Google Authentication.
+  * Adding the production hosting domain to Firebase Authorized Domains.
+  * Adding pilot users.
+  * Running emulator tests.
+  * Deploying rules and indexes.
+* Do not commit service-account keys, admin credentials or `.env` secrets.
+
+## Additional constraints
+
+* Preserve the existing React, Vite, Firebase Authentication and Firestore architecture.
+* Preserve the `/owners/{ownerId}/...` data structure.
+* Do not create a custom backend unless absolutely required.
+* Do not create an in-app readiness dashboard.
+* Do not add paid services.
+* Do not make unrelated styling or terminology changes.
+* Keep TypeScript types strict and avoid `any`.
+* Preserve demo mode, but clearly separate simulated behaviour from cloud functionality.
+* Do not claim that Firebase configuration has been deployed unless deployment was actually performed and verified.
+* Do not expose secrets in the frontend or repository.
+* Keep the changes suitable for Firebase Hosting, Cloudflare Pages, Vercel and Netlify.
+
+## Verification process
+
+After implementation:
+
+1. Run TypeScript checking.
+2. Run the production build.
+3. Run all Firestore Emulator security-rule tests.
+4. Test an allowlisted Google account.
+5. Test a non-allowlisted Google account.
+6. Test two separate allowlisted owners for data isolation.
+7. Simulate a failed Firestore payment write and confirm that no receipt is generated.
+8. Confirm that a successful payment generates exactly one payment and one receipt.
+9. Confirm that a new owner receives no hard-coded bank or UPI details.
+10. Confirm that reminder actions no longer falsely report delivery.
+
+## Final deliverables
+
+Provide:
+
+* A concise list of files changed.
+* Explanation of each of the five fixes.
+* Results of lint, build and emulator tests.
+* Exact commands for deploying the rules and indexes.
+* Exact administrator steps for adding a pilot user.
+* Any Firebase Console steps still requiring manual completion.
+* Any unresolved risks that should be communicated before inviting pilot users.
+
+Do not implement additional scalability changes, document-storage migration, messaging-provider integration or a readiness dashboard in this task.
