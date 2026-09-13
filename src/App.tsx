@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import Navbar from './components/Navbar';
 import OverviewTab from './components/OverviewTab';
 import TenantsTab from './components/TenantsTab';
@@ -22,7 +23,7 @@ import {
   TenantBalanceInfo,
   LeaseDocument,
 } from './types';
-import { storageService, calculateTenantBalance } from './services/storage';
+import { storageService, calculateTenantBalance, getMonthsCount } from './services/storage';
 import { evaluateReminderCandidates } from './services/reminderService';
 import { auth, testConnection } from './services/firebase';
 import { cloudStorageService } from './services/cloudStorageService';
@@ -38,6 +39,16 @@ export default function App() {
   const [payments, setPayments] = useState<Payment[]>(() => storageService.getPayments());
   const [settings, setSettings] = useState<PropertyOwnerSettings>(() => storageService.getSettings());
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>(() => storageService.getReminderLogs());
+
+  // Cursor-based pagination state for global payments (initially 50 records)
+  const [lastPaymentDoc, setLastPaymentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMorePayments, setHasMorePayments] = useState(false);
+  const [isLoadingMorePayments, setIsLoadingMorePayments] = useState(false);
+
+  // Cursor-based pagination state for global reminders (initially 50 records)
+  const [lastReminderDoc, setLastReminderDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreReminders, setHasMoreReminders] = useState(false);
+  const [isLoadingMoreReminders, setIsLoadingMoreReminders] = useState(false);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'reports' | 'reminders'>('overview');
@@ -99,20 +110,30 @@ export default function App() {
       currentUser.uid,
       (cloudTenants) => {
         setTenants(cloudTenants);
+        // Automatically check & populate summary fields for any legacy tenant documents
+        cloudStorageService.ensureTenantSummaries(currentUser.uid, cloudTenants);
       }
     );
 
-    const unsubPayments = cloudStorageService.subscribeToPayments(
+    // Paginate payment records: load only the most recent 50 initially
+    const unsubPayments = cloudStorageService.subscribeToRecentPayments(
       currentUser.uid,
-      (cloudPayments) => {
+      50,
+      (cloudPayments, lastDoc, hasMore) => {
         setPayments(cloudPayments);
+        setLastPaymentDoc(lastDoc);
+        setHasMorePayments(hasMore);
       }
     );
 
-    const unsubReminders = cloudStorageService.subscribeToReminders(
+    // Limit reminder-log loading: fetch only the most recent 50 records
+    const unsubReminders = cloudStorageService.subscribeToRecentReminders(
       currentUser.uid,
-      (cloudReminders) => {
+      50,
+      (cloudReminders, lastDoc, hasMore) => {
         setReminderLogs(cloudReminders);
+        setLastReminderDoc(lastDoc);
+        setHasMoreReminders(hasMore);
       }
     );
 
@@ -123,6 +144,46 @@ export default function App() {
       unsubReminders();
     };
   }, [currentUser]);
+
+  // Handler to load older payments using Firestore cursor pagination
+  const handleLoadMorePayments = async () => {
+    if (!currentUser || !lastPaymentDoc || isLoadingMorePayments) return;
+    setIsLoadingMorePayments(true);
+    try {
+      const res = await cloudStorageService.loadMorePayments(currentUser.uid, lastPaymentDoc, 50);
+      setPayments((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const unique = res.data.filter((p) => !existingIds.has(p.id));
+        return [...prev, ...unique];
+      });
+      setLastPaymentDoc(res.lastDoc);
+      setHasMorePayments(res.hasMore);
+    } catch (err) {
+      console.error('Failed to load more payments:', err);
+    } finally {
+      setIsLoadingMorePayments(false);
+    }
+  };
+
+  // Handler to load older reminder logs using Firestore cursor pagination
+  const handleLoadMoreReminders = async () => {
+    if (!currentUser || !lastReminderDoc || isLoadingMoreReminders) return;
+    setIsLoadingMoreReminders(true);
+    try {
+      const res = await cloudStorageService.loadMoreReminders(currentUser.uid, lastReminderDoc, 50);
+      setReminderLogs((prev) => {
+        const existingIds = new Set(prev.map((r) => r.id));
+        const unique = res.data.filter((r) => !existingIds.has(r.id));
+        return [...prev, ...unique];
+      });
+      setLastReminderDoc(res.lastDoc);
+      setHasMoreReminders(res.hasMore);
+    } catch (err) {
+      console.error('Failed to load more reminders:', err);
+    } finally {
+      setIsLoadingMoreReminders(false);
+    }
+  };
 
   // Compute live balances for each tenant
   const balances = useMemo(() => {
@@ -176,9 +237,31 @@ export default function App() {
         ownerId: currentUser.uid,
       });
     } else {
-      const updated = [newPayment, ...payments];
-      setPayments(updated);
-      storageService.savePayments(updated);
+      const updatedPayments = [newPayment, ...payments];
+      setPayments(updatedPayments);
+      storageService.savePayments(updatedPayments);
+
+      // Maintain summary fields on tenant record
+      const updatedTenants = tenants.map((t) => {
+        if (t.id === newPayment.tenantId) {
+          const currentTotalPaid = t.totalPaid ?? 0;
+          const newTotalPaid = currentTotalPaid + newPayment.amount;
+          const activeMonths = getMonthsCount(t.leaseStart, new Date());
+          const totalAccrued = activeMonths * t.rentAmount;
+          return {
+            ...t,
+            totalPaid: newTotalPaid,
+            outstandingBalance: totalAccrued - newTotalPaid,
+            lastPaymentDate: newPayment.date,
+            lastPaymentAmount: newPayment.amount,
+            lastPaymentReceiptNumber: newPayment.receiptNumber,
+            summaryUpdatedAt: new Date().toISOString(),
+          };
+        }
+        return t;
+      });
+      setTenants(updatedTenants);
+      storageService.saveTenants(updatedTenants);
     }
   };
 
@@ -331,6 +414,9 @@ export default function App() {
             payments={payments}
             balances={balances}
             settings={settings}
+            hasMorePayments={hasMorePayments}
+            isLoadingMorePayments={isLoadingMorePayments}
+            onLoadMorePayments={handleLoadMorePayments}
           />
         )}
 
@@ -340,6 +426,9 @@ export default function App() {
             balances={balances}
             settings={settings}
             reminderLogs={reminderLogs}
+            hasMoreReminders={hasMoreReminders}
+            isLoadingMoreReminders={isLoadingMoreReminders}
+            onLoadMoreReminders={handleLoadMoreReminders}
             onUpdateSettings={handleSaveSettings}
             onLogReminder={handleLogReminder}
             onBatchLogReminders={handleBatchLogReminders}
@@ -399,6 +488,7 @@ export default function App() {
           payments={payments}
           reminderLogs={reminderLogs}
           settings={settings}
+          ownerId={currentUser?.uid}
           onUpdateTenant={handleUpdateTenant}
           onOpenRecordPayment={(tid) => handleOpenRecordPayment(tid)}
           onViewReceipt={(p) => setPreviewPayment(p)}

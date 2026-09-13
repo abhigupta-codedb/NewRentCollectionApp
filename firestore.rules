@@ -44,7 +44,13 @@ service cloud.firestore {
              data.rentAmount is number && data.rentAmount >= 0 &&
              data.dueDay is number && data.dueDay >= 1 && data.dueDay <= 31 &&
              data.status in ['active', 'notice', 'vacated'] &&
-             data.documents is list && data.documents.size() <= 100;
+             data.documents is list && data.documents.size() <= 100 &&
+             (!('totalPaid' in data) || data.totalPaid is number) &&
+             (!('outstandingBalance' in data) || data.outstandingBalance is number) &&
+             (!('lastPaymentDate' in data) || (data.lastPaymentDate is string && data.lastPaymentDate.size() <= 30)) &&
+             (!('lastPaymentAmount' in data) || data.lastPaymentAmount is number) &&
+             (!('lastPaymentReceiptNumber' in data) || (data.lastPaymentReceiptNumber is string && data.lastPaymentReceiptNumber.size() <= 60)) &&
+             (!('summaryUpdatedAt' in data) || (data.summaryUpdatedAt is string && data.summaryUpdatedAt.size() <= 50));
     }
 
     function isValidPayment(data, ownerId) {

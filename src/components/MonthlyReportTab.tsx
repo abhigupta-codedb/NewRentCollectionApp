@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import { Tenant, Payment, PropertyOwnerSettings, TenantBalanceInfo } from '../types';
 import { generateMonthlyReportPdf } from '../services/pdfGenerator';
@@ -17,6 +19,9 @@ interface MonthlyReportTabProps {
   payments: Payment[];
   balances: Map<string, TenantBalanceInfo>;
   settings: PropertyOwnerSettings;
+  hasMorePayments?: boolean;
+  isLoadingMorePayments?: boolean;
+  onLoadMorePayments?: () => void;
 }
 
 const MONTHS = [
@@ -39,6 +44,9 @@ export default function MonthlyReportTab({
   payments,
   balances,
   settings,
+  hasMorePayments,
+  isLoadingMorePayments,
+  onLoadMorePayments,
 }: MonthlyReportTabProps) {
   const currency = settings.currencySymbol || '₹';
 
@@ -557,6 +565,29 @@ export default function MonthlyReportTab({
               </tbody>
             </table>
           </div>
+
+          {hasMorePayments && (
+            <div className="p-3 border-t border-slate-100 flex justify-center bg-slate-50/50">
+              <button
+                type="button"
+                onClick={onLoadMorePayments}
+                disabled={isLoadingMorePayments}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-700 bg-white hover:bg-indigo-50 rounded-lg border border-indigo-200 shadow-2xs transition disabled:opacity-50"
+              >
+                {isLoadingMorePayments ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Purane payment records load ho rahe hain...</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Aur Purane Payment Records Load Karein (Load More)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

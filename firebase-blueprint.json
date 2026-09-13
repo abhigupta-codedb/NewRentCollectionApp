@@ -36,7 +36,13 @@
         "status": { "type": "string", "enum": ["active", "notice", "vacated"] },
         "documents": { "type": "array" },
         "notes": { "type": "string", "maxLength": 1000 },
-        "createdAt": { "type": "string", "maxLength": 50 }
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "totalPaid": { "type": "number" },
+        "outstandingBalance": { "type": "number" },
+        "lastPaymentDate": { "type": "string", "maxLength": 30 },
+        "lastPaymentAmount": { "type": "number" },
+        "lastPaymentReceiptNumber": { "type": "string", "maxLength": 60 },
+        "summaryUpdatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "ownerId", "name", "phone", "unit", "rentAmount", "dueDay", "leaseStart", "leaseEnd", "status"]
     },

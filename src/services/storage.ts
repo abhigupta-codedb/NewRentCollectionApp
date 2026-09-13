@@ -136,19 +136,38 @@ export function getMonthsCount(startDateStr: string, targetDate: Date = new Date
 
 /**
  * Calculates current month status, outstanding balance, and payment history for a tenant
+ * Uses cached summary fields on the tenant document when available, with safe fallback to payments.
  */
 export function calculateTenantBalance(
   tenant: Tenant,
-  payments: Payment[],
+  payments?: Payment[],
   now: Date = new Date()
 ): TenantBalanceInfo {
-  const tenantPayments = payments.filter((p) => p.tenantId === tenant.id);
-  const totalPaid = tenantPayments.reduce((acc, p) => acc + p.amount, 0);
-
-  // Calculate accrued rent from lease start until this month
   const activeMonths = getMonthsCount(tenant.leaseStart, now);
   const totalAccruedRent = activeMonths * tenant.rentAmount;
-  const outstandingBalance = totalAccruedRent - totalPaid;
+
+  // 1. Determine totalPaid and outstandingBalance
+  const hasCachedSummary =
+    typeof tenant.totalPaid === 'number' && typeof tenant.outstandingBalance === 'number';
+
+  const tenantPayments = payments ? payments.filter((p) => p.tenantId === tenant.id) : [];
+
+  let totalPaid: number;
+  let outstandingBalance: number;
+
+  if (hasCachedSummary) {
+    totalPaid = tenant.totalPaid!;
+    // Calculate outstanding dynamically based on current accrued months - totalPaid
+    // to correctly reflect advancing calendar months
+    outstandingBalance = totalAccruedRent - totalPaid;
+  } else if (tenantPayments.length > 0) {
+    totalPaid = tenantPayments.reduce((acc, p) => acc + p.amount, 0);
+    outstandingBalance = totalAccruedRent - totalPaid;
+  } else {
+    // Safe default when no payments loaded yet and legacy tenant
+    totalPaid = tenant.totalPaid ?? 0;
+    outstandingBalance = tenant.outstandingBalance ?? (totalAccruedRent - totalPaid);
+  }
 
   // Determine current month's due date
   const currentYear = now.getFullYear();
@@ -164,7 +183,20 @@ export function calculateTenantBalance(
       (new Date(p.date).getMonth() === currentMonth &&
         new Date(p.date).getFullYear() === currentYear)
   );
-  const currentMonthPaidAmount = paidThisMonth.reduce((sum, p) => sum + p.amount, 0);
+
+  let currentMonthPaidAmount = paidThisMonth.reduce((sum, p) => sum + p.amount, 0);
+
+  // If no matching payments in loaded array, check cached lastPaymentDate
+  if (currentMonthPaidAmount === 0 && tenant.lastPaymentDate) {
+    const lastDate = new Date(tenant.lastPaymentDate);
+    if (
+      !isNaN(lastDate.getTime()) &&
+      lastDate.getMonth() === currentMonth &&
+      lastDate.getFullYear() === currentYear
+    ) {
+      currentMonthPaidAmount = tenant.lastPaymentAmount ?? tenant.rentAmount;
+    }
+  }
 
   // Time diff calculation
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -189,10 +221,29 @@ export function calculateTenantBalance(
   }
 
   // Find last payment
-  const sortedPayments = [...tenantPayments].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const lastPayment = sortedPayments[0];
+  let lastPayment: Payment | undefined;
+  if (tenantPayments.length > 0) {
+    const sortedPayments = [...tenantPayments].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    lastPayment = sortedPayments[0];
+  } else if (tenant.lastPaymentDate) {
+    lastPayment = {
+      id: `summary-pay-${tenant.id}`,
+      receiptNumber: tenant.lastPaymentReceiptNumber || 'REC-SUMMARY',
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      unit: tenant.unit,
+      amount: tenant.lastPaymentAmount || 0,
+      date: tenant.lastPaymentDate,
+      monthCovered: currentMonthName,
+      paymentMethod: 'UPI',
+      referenceId: 'SYNCED-RECORD',
+      status: 'completed',
+      receivedBy: 'Property Owner',
+      createdAt: tenant.lastPaymentDate,
+    };
+  }
 
   const dueIsoDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(
     clampedDueDay

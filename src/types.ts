@@ -25,6 +25,14 @@ export interface Tenant {
   documents: LeaseDocument[];
   notes?: string;
   createdAt: string;
+
+  // Scalability summary / aggregate fields (maintained on tenant doc)
+  totalPaid?: number;
+  outstandingBalance?: number;
+  lastPaymentDate?: string;
+  lastPaymentAmount?: number;
+  lastPaymentReceiptNumber?: string;
+  summaryUpdatedAt?: string;
 }
 
 export interface Payment {

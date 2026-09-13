@@ -1,4 +1,4 @@
-import { useState, ChangeEvent, FormEvent } from 'react';
+import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import {
   X,
   Phone,
@@ -18,7 +18,10 @@ import {
   Edit2,
   Save,
   CreditCard,
+  Loader2,
+  ChevronDown,
 } from 'lucide-react';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import {
   Tenant,
   Payment,
@@ -33,6 +36,7 @@ import {
   getEmailReminderUrl,
   createReminderLog,
 } from '../services/reminderService';
+import { cloudStorageService } from '../services/cloudStorageService';
 
 interface TenantDetailModalProps {
   isOpen: boolean;
@@ -42,6 +46,7 @@ interface TenantDetailModalProps {
   payments: Payment[];
   reminderLogs: ReminderLog[];
   settings: PropertyOwnerSettings;
+  ownerId?: string;
   onUpdateTenant: (updated: Tenant) => void;
   onOpenRecordPayment: (tenantId: string) => void;
   onViewReceipt: (payment: Payment) => void;
@@ -57,6 +62,7 @@ export default function TenantDetailModal({
   payments,
   reminderLogs,
   settings,
+  ownerId,
   onUpdateTenant,
   onOpenRecordPayment,
   onViewReceipt,
@@ -64,8 +70,102 @@ export default function TenantDetailModal({
   onLogReminder,
 }: TenantDetailModalProps) {
   const currency = settings.currencySymbol || '₹';
-  const tenantPayments = payments.filter((p) => p.tenantId === tenant.id);
-  const tenantReminders = reminderLogs.filter((r) => r.tenantId === tenant.id);
+
+  // Tenant-specific payments with on-demand Firestore query & pagination
+  const [tenantPayments, setTenantPayments] = useState<Payment[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [lastPaymentDoc, setLastPaymentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMorePayments, setHasMorePayments] = useState(false);
+  const [isLoadingMorePayments, setIsLoadingMorePayments] = useState(false);
+
+  // Tenant-specific reminders with on-demand Firestore query & pagination
+  const [tenantReminders, setTenantReminders] = useState<ReminderLog[]>([]);
+  const [lastReminderDoc, setLastReminderDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreReminders, setHasMoreReminders] = useState(false);
+  const [isLoadingMoreReminders, setIsLoadingMoreReminders] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !tenant.id) return;
+
+    if (ownerId) {
+      setIsLoadingPayments(true);
+      const unsubPayments = cloudStorageService.subscribeToTenantPayments(
+        ownerId,
+        tenant.id,
+        20,
+        (data, lastDoc, hasMore) => {
+          setTenantPayments(data);
+          setLastPaymentDoc(lastDoc);
+          setHasMorePayments(hasMore);
+          setIsLoadingPayments(false);
+        }
+      );
+
+      const unsubReminders = cloudStorageService.subscribeToTenantReminders(
+        ownerId,
+        tenant.id,
+        20,
+        (data, lastDoc, hasMore) => {
+          setTenantReminders(data);
+          setLastReminderDoc(lastDoc);
+          setHasMoreReminders(hasMore);
+        }
+      );
+
+      return () => {
+        unsubPayments();
+        unsubReminders();
+      };
+    } else {
+      // Demo mode fallback: local array filtering
+      setTenantPayments(payments.filter((p) => p.tenantId === tenant.id));
+      setTenantReminders(reminderLogs.filter((r) => r.tenantId === tenant.id));
+      setIsLoadingPayments(false);
+    }
+  }, [isOpen, tenant.id, ownerId, payments, reminderLogs]);
+
+  const handleLoadMorePayments = async () => {
+    if (!ownerId || !lastPaymentDoc || isLoadingMorePayments) return;
+    setIsLoadingMorePayments(true);
+    try {
+      const res = await cloudStorageService.loadMoreTenantPayments(
+        ownerId,
+        tenant.id,
+        lastPaymentDoc,
+        20
+      );
+      setTenantPayments((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const unique = res.data.filter((p) => !existingIds.has(p.id));
+        return [...prev, ...unique];
+      });
+      setLastPaymentDoc(res.lastDoc);
+      setHasMorePayments(res.hasMore);
+    } finally {
+      setIsLoadingMorePayments(false);
+    }
+  };
+
+  const handleLoadMoreReminders = async () => {
+    if (!ownerId || !lastReminderDoc || isLoadingMoreReminders) return;
+    setIsLoadingMoreReminders(true);
+    try {
+      const res = await cloudStorageService.loadMoreReminders(
+        ownerId,
+        lastReminderDoc,
+        20
+      );
+      setTenantReminders((prev) => {
+        const existingIds = new Set(prev.map((r) => r.id));
+        const unique = res.data.filter((r) => !existingIds.has(r.id));
+        return [...prev, ...unique];
+      });
+      setLastReminderDoc(res.lastDoc);
+      setHasMoreReminders(res.hasMore);
+    } finally {
+      setIsLoadingMoreReminders(false);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'payments' | 'documents' | 'reminders' | 'profile'>('payments');
   
@@ -415,7 +515,12 @@ export default function TenantDetailModal({
                 </div>
               </div>
 
-              {tenantPayments.length === 0 ? (
+              {isLoadingPayments ? (
+                <div className="py-12 text-center border border-slate-200 rounded-xl bg-slate-50">
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">Kiraya entries load ho rahi hain...</p>
+                </div>
+              ) : tenantPayments.length === 0 ? (
                 <div className="py-12 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
                   <CreditCard className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-bold text-slate-700">Abhi tak koi kiraya jama nahi hua</p>
@@ -424,59 +529,83 @@ export default function TenantDetailModal({
                   </p>
                 </div>
               ) : (
-                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                      <tr>
-                        <th className="py-3 px-4">Rashid #</th>
-                        <th className="py-3 px-4">Tareekh</th>
-                        <th className="py-3 px-4">Mahina</th>
-                        <th className="py-3 px-4">Jama Rashi</th>
-                        <th className="py-3 px-4">Payment Madhyam &amp; UTR</th>
-                        <th className="py-3 px-4 text-right">Kiraya Rashid (PDF)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {tenantPayments.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50/80 transition">
-                          <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                            {p.receiptNumber}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">{p.date}</td>
-                          <td className="py-3 px-4 font-bold text-slate-800">{p.monthCovered}</td>
-                          <td className="py-3 px-4 font-black text-emerald-800">
-                            {currency}{p.amount.toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">
-                            <span className="font-bold text-slate-800">{p.paymentMethod}</span>
-                            {p.referenceId && (
-                              <span className="block text-[10px] text-slate-400 font-mono">
-                                {p.referenceId}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right space-x-2">
-                            <button
-                              onClick={() => onViewReceipt(p)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition"
-                            >
-                              <Eye className="w-3 h-3" />
-                              View
-                            </button>
-                            <button
-                              onClick={() =>
-                                downloadReceiptPdf(p, tenant, settings, balanceInfo.outstandingBalance)
-                              }
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-300 transition"
-                            >
-                              <Download className="w-3 h-3" />
-                              HRA PDF
-                            </button>
-                          </td>
+                <div className="space-y-3">
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                        <tr>
+                          <th className="py-3 px-4">Rashid #</th>
+                          <th className="py-3 px-4">Tareekh</th>
+                          <th className="py-3 px-4">Mahina</th>
+                          <th className="py-3 px-4">Jama Rashi</th>
+                          <th className="py-3 px-4">Payment Madhyam &amp; UTR</th>
+                          <th className="py-3 px-4 text-right">Kiraya Rashid (PDF)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {tenantPayments.map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-50/80 transition">
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                              {p.receiptNumber}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">{p.date}</td>
+                            <td className="py-3 px-4 font-bold text-slate-800">{p.monthCovered}</td>
+                            <td className="py-3 px-4 font-black text-emerald-800">
+                              {currency}{p.amount.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">
+                              <span className="font-bold text-slate-800">{p.paymentMethod}</span>
+                              {p.referenceId && (
+                                <span className="block text-[10px] text-slate-400 font-mono">
+                                  {p.referenceId}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right space-x-2">
+                              <button
+                                onClick={() => onViewReceipt(p)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition"
+                              >
+                                <Eye className="w-3 h-3" />
+                                View
+                              </button>
+                              <button
+                                onClick={() =>
+                                  downloadReceiptPdf(p, tenant, settings, balanceInfo.outstandingBalance)
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-300 transition"
+                              >
+                                <Download className="w-3 h-3" />
+                                HRA PDF
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {hasMorePayments && (
+                    <div className="pt-2 flex justify-center">
+                      <button
+                        onClick={handleLoadMorePayments}
+                        disabled={isLoadingMorePayments}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition disabled:opacity-50"
+                      >
+                        {isLoadingMorePayments ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Purane payments load ho rahe hain...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            <span>Aur Purane Payments Dekhein (Load More)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -646,6 +775,28 @@ export default function TenantDetailModal({
                       </p>
                     </div>
                   ))}
+
+                  {hasMoreReminders && (
+                    <div className="pt-2 flex justify-center">
+                      <button
+                        onClick={handleLoadMoreReminders}
+                        disabled={isLoadingMoreReminders}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition disabled:opacity-50"
+                      >
+                        {isLoadingMoreReminders ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Purane reminders load ho rahe hain...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            <span>Aur Purane Reminders Dekhein (Load More)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

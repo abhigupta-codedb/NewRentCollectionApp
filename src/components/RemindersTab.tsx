@@ -11,6 +11,8 @@ import {
   Send,
   History,
   Sparkles,
+  Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import {
   Tenant,
@@ -32,6 +34,9 @@ interface RemindersTabProps {
   balances: Map<string, TenantBalanceInfo>;
   settings: PropertyOwnerSettings;
   reminderLogs: ReminderLog[];
+  hasMoreReminders?: boolean;
+  isLoadingMoreReminders?: boolean;
+  onLoadMoreReminders?: () => void;
   onUpdateSettings: (newSettings: PropertyOwnerSettings) => void;
   onLogReminder: (log: ReminderLog) => void;
   onBatchLogReminders: (logs: ReminderLog[]) => void;
@@ -42,6 +47,9 @@ export default function RemindersTab({
   balances,
   settings,
   reminderLogs,
+  hasMoreReminders,
+  isLoadingMoreReminders,
+  onLoadMoreReminders,
   onUpdateSettings,
   onLogReminder,
   onBatchLogReminders,
@@ -650,6 +658,29 @@ export default function RemindersTab({
                   </p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {hasMoreReminders && (
+            <div className="p-4 border-t border-slate-100 flex justify-center bg-slate-50/50">
+              <button
+                type="button"
+                onClick={onLoadMoreReminders}
+                disabled={isLoadingMoreReminders}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-700 bg-white hover:bg-indigo-50 rounded-lg border border-indigo-200 shadow-2xs transition disabled:opacity-50"
+              >
+                {isLoadingMoreReminders ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Purane reminder logs load ho rahe hain...</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Aur Purane Logs Dekhein (Load More)</span>
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>
