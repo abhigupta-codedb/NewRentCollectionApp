@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import Navbar from './components/Navbar';
 import OverviewTab from './components/OverviewTab';
 import TenantsTab from './components/TenantsTab';
@@ -432,6 +433,8 @@ export default function App() {
             onUpdateSettings={handleSaveSettings}
             onLogReminder={handleLogReminder}
             onBatchLogReminders={handleBatchLogReminders}
+            isDemoMode={!currentUser || isDemoMode}
+            onOpenSettings={() => setIsSettingsOpen(true)}
           />
         )}
       </main>
@@ -440,7 +443,7 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>
-            {settings.businessName} &bull; Rent Collection, Automated Reminders &amp; Leases
+            {settings.businessName || 'Rent Collection App'} &bull; Rent Collection, Reminders &amp; Leases
           </p>
           <div className="flex items-center gap-4 text-slate-400">
             <button
@@ -473,6 +476,7 @@ export default function App() {
         balances={balances}
         settings={settings}
         onPaymentRecorded={handlePaymentRecorded}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Individual Tenant Dashboard Modal */}
@@ -494,6 +498,7 @@ export default function App() {
           onViewReceipt={(p) => setPreviewPayment(p)}
           onViewDocument={(doc, t) => setPreviewDocState({ doc, tenant: t })}
           onLogReminder={handleLogReminder}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       )}
 
@@ -522,6 +527,7 @@ export default function App() {
           }
           settings={settings}
           currentBalance={balances.get(previewPayment.tenantId)?.outstandingBalance}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       )}
 

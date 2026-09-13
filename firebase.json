@@ -1,0 +1,15 @@
+{
+  "firestore": {
+    "database": "ai-studio-rentcollectionte-16e1cfd4-fb8a-4c0f-9c7b-709974b30276",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}

@@ -90,9 +90,24 @@
         "amountDue": { "type": "number" }
       },
       "required": ["id", "ownerId", "tenantId", "tenantName", "channel", "recipientContact", "message", "sentAt", "status", "dueDate", "amountDue"]
+    },
+    "PilotUser": {
+      "title": "PilotUser",
+      "description": "Server-enforced pilot allowlist entry indexed by lowercase email",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 200 },
+        "addedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["enabled"]
     }
   },
   "firestore": {
+    "/pilotUsers/{email}": {
+      "schema": "PilotUser",
+      "description": "Server-enforced pilot allowlist indexed by normalized lowercase email"
+    },
     "/owners/{ownerId}": {
       "schema": "Owner",
       "description": "Owner settings, bank details, and notification defaults"

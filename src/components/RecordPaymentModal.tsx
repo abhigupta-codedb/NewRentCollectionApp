@@ -1,8 +1,9 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { X, CreditCard, Calendar, CheckCircle2, Download } from 'lucide-react';
+import { X, CreditCard, Calendar, CheckCircle2, Download, AlertCircle, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Tenant, Payment, PropertyOwnerSettings, TenantBalanceInfo } from '../types';
 import { downloadReceiptPdf } from '../services/pdfGenerator';
+import { validateReceiptRequirements } from '../utils/ownerValidation';
 
 interface RecordPaymentModalProps {
   isOpen: boolean;
@@ -11,7 +12,8 @@ interface RecordPaymentModalProps {
   selectedTenantId?: string;
   balances: Map<string, TenantBalanceInfo>;
   settings: PropertyOwnerSettings;
-  onPaymentRecorded: (payment: Payment, shouldDownloadReceipt: boolean) => void;
+  onPaymentRecorded: (payment: Payment, shouldDownloadReceipt: boolean) => Promise<void>;
+  onOpenSettings?: () => void;
 }
 
 export default function RecordPaymentModal({
@@ -22,6 +24,7 @@ export default function RecordPaymentModal({
   balances,
   settings,
   onPaymentRecorded,
+  onOpenSettings,
 }: RecordPaymentModalProps) {
   const currency = settings.currencySymbol || '₹';
 
@@ -34,6 +37,8 @@ export default function RecordPaymentModal({
   const [notes, setNotes] = useState<string>('');
   const [autoDownloadPdf, setAutoDownloadPdf] = useState<boolean>(true);
   const [receiptNumber, setReceiptNumber] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const currentTenant = tenants.find((t) => t.id === tenantId);
   const currentBalanceInfo = currentTenant ? balances.get(currentTenant.id) : undefined;
@@ -63,14 +68,20 @@ export default function RecordPaymentModal({
       // Generate receipt number
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       setReceiptNumber(`KIR-${now.getFullYear()}-${randomSuffix}`);
+      setSubmitError(null);
     }
   }, [tenantId, currentTenant]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const receiptValidation = validateReceiptRequirements(settings, Number(amount));
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!currentTenant || !amount || Number(amount) <= 0) return;
+    if (!currentTenant || !amount || Number(amount) <= 0 || isSubmitting) return;
+
+    setSubmitError(null);
+    setIsSubmitting(true);
 
     const newPayment: Payment = {
       id: `pay-${Date.now()}`,
@@ -89,24 +100,36 @@ export default function RecordPaymentModal({
       createdAt: new Date().toISOString(),
     };
 
-    // Confetti effect
     try {
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.6 },
-      });
-    } catch {
-      // ignore
-    }
+      // 1. Submit & Wait for Firestore confirmation
+      await onPaymentRecorded(newPayment, autoDownloadPdf);
 
-    if (autoDownloadPdf) {
-      const remainingBalance = (currentBalanceInfo?.outstandingBalance ?? currentTenant.rentAmount) - Number(amount);
-      downloadReceiptPdf(newPayment, currentTenant, settings, remainingBalance);
-    }
+      // 2. Confetti effect on confirmed success
+      try {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.6 },
+        });
+      } catch {
+        // ignore
+      }
 
-    onPaymentRecorded(newPayment, autoDownloadPdf);
-    onClose();
+      // 3. Generate/download receipt only if valid and requested
+      if (autoDownloadPdf && receiptValidation.isValid) {
+        const remainingBalance = (currentBalanceInfo?.outstandingBalance ?? currentTenant.rentAmount) - Number(amount);
+        downloadReceiptPdf(newPayment, currentTenant, settings, remainingBalance);
+      }
+
+      // 4. Close modal
+      onClose();
+    } catch (err: unknown) {
+      console.error('Payment saving failed:', err);
+      const msg = err instanceof Error ? err.message : 'Firestore par payment save karne me dikkat aayi. Kripya dubara koshish karein.';
+      setSubmitError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -291,36 +314,84 @@ export default function RecordPaymentModal({
           </div>
 
           {/* Auto Download Option */}
-          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoDownloadPdf}
-                onChange={(e) => setAutoDownloadPdf(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-              />
-              <span className="text-xs font-semibold text-emerald-900">
-                Kiraya Rashid (PDF) turant download karein
-              </span>
-            </label>
-            <Download className="w-4 h-4 text-emerald-700" />
+          <div className="space-y-2">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoDownloadPdf}
+                  onChange={(e) => setAutoDownloadPdf(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                />
+                <span className="text-xs font-semibold text-emerald-900">
+                  Kiraya Rashid (PDF) turant download karein
+                </span>
+              </label>
+              <Download className="w-4 h-4 text-emerald-700" />
+            </div>
+
+            {autoDownloadPdf && !receiptValidation.isValid && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-xs text-amber-900">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold">{receiptValidation.message}</p>
+                  {onOpenSettings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenSettings();
+                      }}
+                      className="mt-1 text-emerald-800 font-bold underline hover:text-emerald-950 block"
+                    >
+                      Settings Kholein (Complete Settings) →
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Error Message if Firestore fails */}
+          {submitError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-xs text-red-900">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold">Payment save nahi ho paya:</p>
+                <p className="mt-0.5">{submitError}</p>
+                <p className="text-[11px] text-red-700 mt-1">
+                  Data safe hai. Kripya connection check karke dobara submit karein.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
             >
               Radd Karein (Cancel)
             </button>
             <button
               type="submit"
-              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow-xs transition"
+              disabled={isSubmitting || !currentTenant || !amount || Number(amount) <= 0}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 rounded-lg shadow-xs transition"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Kiraya Jama Karein (+ जमा दर्ज करें)</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Firestore Me Save Ho Raha Hai...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Kiraya Jama Karein (+ जमा दर्ज करें)</span>
+                </>
+              )}
             </button>
           </div>
         </form>

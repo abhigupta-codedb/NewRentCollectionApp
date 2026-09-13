@@ -214,7 +214,7 @@ export function createReminderLog(
     message,
     subject,
     sentAt: new Date().toISOString(),
-    status: 'sent',
+    status: 'queued',
     isAutomated,
     dueDate: balanceInfo.currentMonthDueDate,
     amountDue: balanceInfo.outstandingBalance > 0 ? balanceInfo.outstandingBalance : tenant.rentAmount,

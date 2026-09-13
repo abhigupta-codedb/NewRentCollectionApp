@@ -17,8 +17,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isPilotUser() {
+      return isSignedIn() &&
+             request.auth.token.email != null &&
+             exists(/databases/$(database)/documents/pilotUsers/$(request.auth.token.email.lower())) &&
+             get(/databases/$(database)/documents/pilotUsers/$(request.auth.token.email.lower())).data.enabled == true;
+    }
+
     function isOwner(ownerId) {
-      return isSignedIn() && request.auth.uid == ownerId;
+      return isSignedIn() && request.auth.uid == ownerId && isPilotUser();
     }
 
     function isValidId(id) {
@@ -71,6 +78,16 @@ service cloud.firestore {
              data.channel in ['whatsapp', 'email'] &&
              data.status in ['sent', 'queued', 'failed'] &&
              data.message is string && data.message.size() <= 2000;
+    }
+
+    // Pilot Users Allowlist
+    // Authenticated users may ONLY read their own allowlist entry to verify access.
+    // Client users cannot create, list, update, or delete allowlist entries.
+    match /pilotUsers/{email} {
+      allow get: if isSignedIn() &&
+                    request.auth.token.email != null &&
+                    request.auth.token.email.lower() == email.lower();
+      allow list, create, update, delete: if false;
     }
 
     // Owner Account & Settings

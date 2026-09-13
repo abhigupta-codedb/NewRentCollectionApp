@@ -1,7 +1,9 @@
-import { X, Download, Printer, Share2, CheckCircle, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { X, Download, Printer, Share2, CheckCircle, ShieldCheck, AlertCircle, Settings } from 'lucide-react';
 import { Payment, Tenant, PropertyOwnerSettings } from '../types';
 import { downloadReceiptPdf } from '../services/pdfGenerator';
 import { cleanPhoneNumber } from '../services/reminderService';
+import { validateReceiptRequirements } from '../utils/ownerValidation';
 
 interface ReceiptPreviewModalProps {
   isOpen: boolean;
@@ -10,6 +12,7 @@ interface ReceiptPreviewModalProps {
   tenant: Tenant | null;
   settings: PropertyOwnerSettings;
   currentBalance?: number;
+  onOpenSettings?: () => void;
 }
 
 export default function ReceiptPreviewModal({
@@ -19,17 +22,20 @@ export default function ReceiptPreviewModal({
   tenant,
   settings,
   currentBalance,
+  onOpenSettings,
 }: ReceiptPreviewModalProps) {
   if (!isOpen || !payment || !tenant) return null;
 
   const currency = settings.currencySymbol || '₹';
+  const receiptValidation = validateReceiptRequirements(settings, payment.amount);
 
   const handleDownload = () => {
+    if (!receiptValidation.isValid) return;
     downloadReceiptPdf(payment, tenant, settings, currentBalance);
   };
 
   const handleShareWhatsApp = () => {
-    const text = `Namaste ${tenant.name} ji,\n\nAapka ${tenant.unit} ka ${payment.monthCovered} mahine ka kiraya ${currency}${payment.amount.toLocaleString('en-IN')} safalta-purvak prapt hua hai.\n\nRashid No: ${payment.receiptNumber}\nPayment Mode: ${payment.paymentMethod}${payment.referenceId ? ` (UTR: ${payment.referenceId})` : ''}\nTareekh: ${payment.date}\n\nDhanyawad,\n${settings.ownerName} (${settings.businessName})`;
+    const text = `Namaste ${tenant.name} ji,\n\nAapka ${tenant.unit} ka ${payment.monthCovered} mahine ka kiraya ${currency}${payment.amount.toLocaleString('en-IN')} safalta-purvak prapt hua hai.\n\nRashid No: ${payment.receiptNumber}\nPayment Mode: ${payment.paymentMethod}${payment.referenceId ? ` (UTR: ${payment.referenceId})` : ''}\nTareekh: ${payment.date}\n\nDhanyawad,\n${settings.ownerName || 'Makaan Malik'}${settings.businessName ? ` (${settings.businessName})` : ''}`;
     const phone = cleanPhoneNumber(tenant.phone);
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -51,7 +57,8 @@ export default function ReceiptPreviewModal({
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition"
+              disabled={!receiptValidation.isValid}
+              className="flex items-center gap-1.5 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download PDF</span>
@@ -64,6 +71,29 @@ export default function ReceiptPreviewModal({
             </button>
           </div>
         </div>
+
+        {/* Validation Warning if incomplete */}
+        {!receiptValidation.isValid && (
+          <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-start gap-3 text-xs text-amber-900">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold">Landlord Jankari Adhuri Hai (Settings Incomplete)</p>
+              <p className="mt-0.5">{receiptValidation.message}</p>
+              {onOpenSettings && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenSettings();
+                  }}
+                  className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-amber-200/70 hover:bg-amber-300 text-amber-900 rounded font-semibold text-[11px] transition"
+                >
+                  <Settings className="w-3 h-3" />
+                  <span>Settings Me Jakar Jankari Bharein →</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Receipt Visual Sheet */}
         <div className="p-6 bg-slate-50 max-h-[75vh] overflow-y-auto">

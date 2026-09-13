@@ -13,6 +13,8 @@ import {
   getDoc,
   writeBatch,
   runTransaction,
+} from 'firebase/firestore';
+import type {
   Unsubscribe,
   QueryDocumentSnapshot,
   DocumentData,
@@ -40,8 +42,30 @@ export interface PaginatedResult<T> {
 
 export const cloudStorageService = {
   /**
+   * Checks whether the user's email is on the server-enforced pilot allowlist.
+   * Document path: /pilotUsers/{normalizedEmail} with { enabled: true }
+   */
+  async checkPilotAccess(email?: string | null): Promise<boolean> {
+    if (!email) return false;
+    const normalizedEmail = email.trim().toLowerCase();
+    const path = `pilotUsers/${normalizedEmail}`;
+    try {
+      const pilotDocRef = doc(db, 'pilotUsers', normalizedEmail);
+      const snap = await getDoc(pilotDocRef);
+      if (snap.exists() && snap.data()?.enabled === true) {
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('Pilot check failed or document not found:', error);
+      return false;
+    }
+  },
+
+  /**
    * Initializes or fetches owner document settings.
-   * If new user, creates their initial profile with default configuration and seeded data.
+   * If new user, creates their initial profile with blank personal/banking configuration.
+   * Does NOT seed any other user's tenants, payments, or banking information.
    */
   async initializeOwnerProfile(
     ownerId: string,
@@ -57,34 +81,27 @@ export const cloudStorageService = {
       }
 
       // First time initialization for this landlord/property owner
+      // Only populates owner name & email from Google auth if available.
+      // Phone, address, PAN, bank account, IFSC, UPI remain blank.
       const initialSettings: PropertyOwnerSettings = {
         ...DEFAULT_SETTINGS,
-        ownerName: displayName || email?.split('@')[0] || 'Property Owner',
-        businessName: displayName ? `${displayName}'s Properties` : 'Rental Properties LLC',
-        email: email || DEFAULT_SETTINGS.email,
+        ownerName: displayName || '',
+        businessName: displayName ? `${displayName}'s Properties` : '',
+        email: email || '',
+        phone: '',
+        address: '',
+        landlordPan: '',
+        bankDetails: {
+          accountName: '',
+          bankName: '',
+          accountNumber: '',
+          routingOrIfsc: '',
+          upiId: '',
+          upiNumber: '',
+        },
       };
 
       await setDoc(ownerDocRef, initialSettings);
-
-      // Seed starter tenants and payments with pre-computed summary fields
-      const batch = writeBatch(db);
-
-      INITIAL_TENANTS.forEach((tenant) => {
-        const tenantRef = doc(db, `owners/${ownerId}/tenants`, tenant.id);
-        batch.set(tenantRef, { ...tenant, ownerId });
-      });
-
-      INITIAL_PAYMENTS.forEach((payment) => {
-        const paymentRef = doc(db, `owners/${ownerId}/payments`, payment.id);
-        batch.set(paymentRef, { ...payment, ownerId });
-      });
-
-      INITIAL_REMINDER_LOGS.forEach((reminder) => {
-        const reminderRef = doc(db, `owners/${ownerId}/reminders`, reminder.id);
-        batch.set(reminderRef, { ...reminder, ownerId });
-      });
-
-      await batch.commit();
       return initialSettings;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);

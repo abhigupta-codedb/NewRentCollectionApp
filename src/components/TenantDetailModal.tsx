@@ -21,7 +21,7 @@ import {
   Loader2,
   ChevronDown,
 } from 'lucide-react';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import {
   Tenant,
   Payment,
@@ -37,6 +37,7 @@ import {
   createReminderLog,
 } from '../services/reminderService';
 import { cloudStorageService } from '../services/cloudStorageService';
+import { validatePaymentInstructions } from '../utils/ownerValidation';
 
 interface TenantDetailModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ interface TenantDetailModalProps {
   onViewReceipt: (payment: Payment) => void;
   onViewDocument: (doc: LeaseDocument, tenant: Tenant) => void;
   onLogReminder: (log: ReminderLog) => void;
+  onOpenSettings?: () => void;
 }
 
 export default function TenantDetailModal({
@@ -68,6 +70,7 @@ export default function TenantDetailModal({
   onViewReceipt,
   onViewDocument,
   onLogReminder,
+  onOpenSettings,
 }: TenantDetailModalProps) {
   const currency = settings.currencySymbol || '₹';
 
@@ -188,20 +191,28 @@ export default function TenantDetailModal({
   const [editRent, setEditRent] = useState(tenant.rentAmount);
   const [editDueDay, setEditDueDay] = useState(tenant.dueDay);
   const [editNotes, setEditNotes] = useState(tenant.notes || '');
+  const [reminderWarning, setReminderWarning] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
+  const paymentValidation = validatePaymentInstructions(settings);
+
   // Handle WhatsApp Reminder Dispatch
   const handleSendWhatsApp = () => {
+    if (!paymentValidation.isValid) {
+      setReminderWarning(paymentValidation.message || 'Payment details missing');
+      return;
+    }
+    setReminderWarning(null);
     const url = getWhatsAppReminderUrl(tenant, balanceInfo, settings);
     window.open(url, '_blank');
 
-    // Create log
+    // Create log with queued status
     const log = createReminderLog(
       tenant,
       balanceInfo,
       'whatsapp',
-      `WhatsApp reminder bheja gaya for ${tenant.unit}. Kul Bakaya: ${currency}${balanceInfo.outstandingBalance.toLocaleString('en-IN')}`,
+      `WhatsApp reminder khola gaya for ${tenant.unit}. Kul Bakaya: ${currency}${balanceInfo.outstandingBalance.toLocaleString('en-IN')}`,
       undefined,
       false
     );
@@ -210,15 +221,20 @@ export default function TenantDetailModal({
 
   // Handle Email Reminder Dispatch
   const handleSendEmail = () => {
+    if (!paymentValidation.isValid) {
+      setReminderWarning(paymentValidation.message || 'Payment details missing');
+      return;
+    }
+    setReminderWarning(null);
     const url = getEmailReminderUrl(tenant, balanceInfo, settings);
     window.location.href = url;
 
-    // Create log
+    // Create log with queued status
     const log = createReminderLog(
       tenant,
       balanceInfo,
       'email',
-      `Email reminder bheja gaya for ${tenant.unit}. Due date: ${balanceInfo.currentMonthDueDate}`,
+      `Email reminder khola gaya for ${tenant.unit}. Due date: ${balanceInfo.currentMonthDueDate}`,
       `Kiraya Due Reminder - ${tenant.unit}`,
       false
     );
@@ -735,6 +751,27 @@ export default function TenantDetailModal({
                 </div>
               </div>
 
+              {reminderWarning && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold">Payment Jankari Adhuri Hai:</p>
+                    <p className="mt-0.5">{reminderWarning}</p>
+                    {onOpenSettings && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onOpenSettings();
+                        }}
+                        className="mt-1 text-emerald-800 font-bold underline hover:text-emerald-950 block"
+                      >
+                        Settings Me Jakar UPI / Bank Details Jodein →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {tenantReminders.length === 0 ? (
                 <div className="py-12 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
                   <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-2" />
@@ -760,6 +797,21 @@ export default function TenantDetailModal({
                             }`}
                           >
                             {rem.channel}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${
+                              rem.status === 'sent'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : rem.status === 'failed'
+                                ? 'bg-red-50 text-red-700 border border-red-200'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {rem.status === 'sent'
+                              ? 'Sent'
+                              : rem.status === 'failed'
+                              ? 'Failed'
+                              : 'Queued (Opened in App)'}
                           </span>
                           <span className="text-slate-500">{new Date(rem.sentAt).toLocaleString('en-IN')}</span>
                           {rem.isAutomated && (
