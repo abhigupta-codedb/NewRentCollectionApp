@@ -92,10 +92,10 @@ export function generateReceiptPdf(
   y += 6;
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
-  doc.text('Makaan / Unit No:', margin + 10, y);
+  doc.text('Property & Unit:', margin + 10, y);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(tenant.unit, margin + 45, y);
+  doc.text(`${tenant.propertyType || 'Flat'} - ${tenant.unit}`, margin + 45, y);
 
   y += 6;
   doc.setFont('helvetica', 'normal');

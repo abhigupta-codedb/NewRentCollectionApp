@@ -160,6 +160,55 @@ describe('Firestore Security Rules - Pilot Safety & Isolation', () => {
             rentAmount: 12000,
             dueDay: 5,
             status: 'active',
+            propertyType: 'Flat',
+            documents: [],
+          })
+      );
+    });
+
+    it('should validate propertyType (allow Flat, Duplex, Shop, Godown and reject invalid)', async () => {
+      const pilotDb = testEnv
+        .authenticatedContext(PILOT_UID, { email: PILOT_EMAIL })
+        .firestore();
+
+      for (const validProp of ['Flat', 'Duplex', 'Shop', 'Godown']) {
+        await assertSucceeds(
+          pilotDb
+            .collection('owners')
+            .doc(PILOT_UID)
+            .collection('tenants')
+            .doc(`tenant-${validProp.toLowerCase()}`)
+            .set({
+              id: `tenant-${validProp.toLowerCase()}`,
+              ownerId: PILOT_UID,
+              name: `Tenant ${validProp}`,
+              phone: '+91 98765 43210',
+              unit: `${validProp} Unit 1`,
+              propertyType: validProp,
+              rentAmount: 15000,
+              dueDay: 1,
+              status: 'active',
+              documents: [],
+            })
+        );
+      }
+
+      await assertFails(
+        pilotDb
+          .collection('owners')
+          .doc(PILOT_UID)
+          .collection('tenants')
+          .doc('tenant-invalid-prop')
+          .set({
+            id: 'tenant-invalid-prop',
+            ownerId: PILOT_UID,
+            name: 'Invalid Property Tenant',
+            phone: '+91 98765 43210',
+            unit: 'Unit 99',
+            propertyType: 'Penthouse',
+            rentAmount: 15000,
+            dueDay: 1,
+            status: 'active',
             documents: [],
           })
       );

@@ -1,6 +1,6 @@
 import { useState, ChangeEvent, FormEvent } from 'react';
-import { X, Upload, FileText, UserPlus, Phone, Mail, Home, Calendar } from 'lucide-react';
-import { Tenant, LeaseDocument, PropertyOwnerSettings } from '../types';
+import { X, Upload, FileText, UserPlus, Phone, Mail, Home, Calendar, Building2 } from 'lucide-react';
+import { Tenant, LeaseDocument, PropertyOwnerSettings, PropertyType, PROPERTY_TYPES } from '../types';
 
 interface AddTenantModalProps {
   isOpen: boolean;
@@ -20,6 +20,7 @@ export default function AddTenantModal({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [propertyType, setPropertyType] = useState<PropertyType>('Flat');
   const [unit, setUnit] = useState('');
   const [rentAmount, setRentAmount] = useState<number | ''>('');
   const [securityDeposit, setSecurityDeposit] = useState<number | ''>('');
@@ -38,6 +39,21 @@ export default function AddTenantModal({
   } | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const getUnitPlaceholder = (type: PropertyType) => {
+    switch (type) {
+      case 'Flat':
+        return 'Jaise: Flat 302, Pocket B, Mayur Vihar';
+      case 'Duplex':
+        return 'Jaise: Villa 12 / Kothi No. 4, Sector 15';
+      case 'Shop':
+        return 'Jaise: Shop G-4, Main Market Road';
+      case 'Godown':
+        return 'Jaise: Godown #3, Transport Nagar';
+      default:
+        return 'Jaise: Unit No. 101';
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -92,6 +108,7 @@ export default function AddTenantModal({
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim() || `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+      propertyType,
       unit: unit.trim(),
       rentAmount: Number(rentAmount),
       securityDeposit: securityDeposit ? Number(securityDeposit) : Number(rentAmount) * 2,
@@ -202,7 +219,38 @@ export default function AddTenantModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Makaan / Flat / Kamra No. *
+                  Property Ka Prakar (Type of Property) *
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-amber-600" />
+                  <select
+                    value={propertyType}
+                    onChange={(e) => setPropertyType(e.target.value as PropertyType)}
+                    className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-amber-500 border-slate-300 bg-white font-medium text-slate-800"
+                  >
+                    <option value="Flat">Flat (फ्लैट - Residential Flat / Apartment)</option>
+                    <option value="Duplex">Duplex (डुप्लेक्स - Independent House / Villa)</option>
+                    <option value="Shop">Shop (दुकान - Commercial Shop)</option>
+                    <option value="Godown">Godown (गोदाम - Warehouse / Storage)</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {propertyType === 'Flat' && 'Residential flat ya apartment'}
+                  {propertyType === 'Duplex' && 'Independent duplex house ya kothi'}
+                  {propertyType === 'Shop' && 'Commercial retail market dukaan'}
+                  {propertyType === 'Godown' && 'Commercial godown ya storage warehouse'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {propertyType === 'Shop'
+                    ? 'Dukaan No. / Address (Shop Number) *'
+                    : propertyType === 'Godown'
+                    ? 'Godown No. / Shed (Godown Number) *'
+                    : propertyType === 'Duplex'
+                    ? 'Duplex / Kothi No. / Sector *'
+                    : 'Flat / Unit / Kamra No. *'}
                 </label>
                 <div className="relative">
                   <Home className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -213,7 +261,7 @@ export default function AddTenantModal({
                       setUnit(e.target.value);
                       if (errors.unit) setErrors({ ...errors, unit: '' });
                     }}
-                    placeholder="Jaise: Flat 302, Pocket B, Mayur Vihar"
+                    placeholder={getUnitPlaceholder(propertyType)}
                     className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-amber-500 border-slate-300"
                   />
                 </div>

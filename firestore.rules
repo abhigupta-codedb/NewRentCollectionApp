@@ -52,6 +52,7 @@ service cloud.firestore {
              data.dueDay is number && data.dueDay >= 1 && data.dueDay <= 31 &&
              data.status in ['active', 'notice', 'vacated'] &&
              data.documents is list && data.documents.size() <= 100 &&
+             (!('propertyType' in data) || data.propertyType in ['Flat', 'Duplex', 'Shop', 'Godown']) &&
              (!('totalPaid' in data) || data.totalPaid is number) &&
              (!('outstandingBalance' in data) || data.outstandingBalance is number) &&
              (!('lastPaymentDate' in data) || (data.lastPaymentDate is string && data.lastPaymentDate.size() <= 30)) &&

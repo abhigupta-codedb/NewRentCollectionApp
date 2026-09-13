@@ -28,6 +28,7 @@ export function formatReminderTemplate(
   return template
     .replace(/\{tenant_name\}/g, tenant.name)
     .replace(/\{unit\}/g, tenant.unit)
+    .replace(/\{property_type\}/g, tenant.propertyType || 'Flat')
     .replace(/\{amount\}/g, dueAmountStr)
     .replace(/\{due_date\}/g, formattedDueDate)
     .replace(/\{outstanding\}/g, outstandingStr)

@@ -105,6 +105,7 @@ export default function MonthlyReportTab({
 
       return {
         tenantName: tenant.name,
+        propertyType: tenant.propertyType || 'Flat',
         unit: tenant.unit,
         rentAmount: tenant.rentAmount,
         paidAmount: paid,
@@ -520,7 +521,12 @@ export default function MonthlyReportTab({
                   <tr key={row.tenantName} className="hover:bg-slate-50/80 transition">
                     <td className="py-2.5 px-3">
                       <span className="font-bold text-slate-900">{row.tenantName}</span>
-                      <span className="block text-[10px] text-slate-500">{row.unit}</span>
+                      <span className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                        <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-900 font-bold border border-amber-200 text-[9px]">
+                          {row.propertyType}
+                        </span>
+                        <span>{row.unit}</span>
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-700 font-medium">
                       {currency}{row.rentAmount.toLocaleString('en-IN')}

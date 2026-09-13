@@ -27,6 +27,7 @@
         "name": { "type": "string", "maxLength": 120 },
         "phone": { "type": "string", "maxLength": 30 },
         "email": { "type": "string", "maxLength": 150 },
+        "propertyType": { "type": "string", "enum": ["Flat", "Duplex", "Shop", "Godown"] },
         "unit": { "type": "string", "maxLength": 80 },
         "rentAmount": { "type": "number" },
         "securityDeposit": { "type": "number" },

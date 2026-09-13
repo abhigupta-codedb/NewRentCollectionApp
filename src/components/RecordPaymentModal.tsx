@@ -166,7 +166,7 @@ export default function RecordPaymentModal({
           {/* Tenant Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Kirayedar &amp; Kamra / Flat Chunein *
+              Kirayedar &amp; Property (Flat / Shop / Godown / Duplex) *
             </label>
             <select
               value={tenantId}
@@ -175,7 +175,7 @@ export default function RecordPaymentModal({
             >
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} — {t.unit} ({currency}{t.rentAmount.toLocaleString('en-IN')}/mahina)
+                  {t.name} — [{t.propertyType || 'Flat'}] {t.unit} ({currency}{t.rentAmount.toLocaleString('en-IN')}/mahina)
                 </option>
               ))}
             </select>
@@ -184,7 +184,12 @@ export default function RecordPaymentModal({
             {currentBalanceInfo && (
               <div className="flex items-center justify-between mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                 <span className="text-slate-600">
-                  Mahina Kiraya:{' '}
+                  Property:{' '}
+                  <strong className="text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[11px]">
+                    {currentTenant?.propertyType || 'Flat'}
+                  </strong>
+                  {' · '}
+                  Kiraya:{' '}
                   <strong className="text-slate-900">
                     {currency}{currentTenant?.rentAmount.toLocaleString('en-IN')}
                   </strong>

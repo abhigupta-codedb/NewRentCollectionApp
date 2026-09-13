@@ -29,6 +29,7 @@ import {
   TenantBalanceInfo,
   LeaseDocument,
   ReminderLog,
+  PropertyType,
 } from '../types';
 import { downloadReceiptPdf } from '../services/pdfGenerator';
 import {
@@ -188,10 +189,20 @@ export default function TenantDetailModal({
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editPhone, setEditPhone] = useState(tenant.phone);
   const [editEmail, setEditEmail] = useState(tenant.email);
+  const [editPropertyType, setEditPropertyType] = useState<PropertyType>(tenant.propertyType || 'Flat');
   const [editRent, setEditRent] = useState(tenant.rentAmount);
   const [editDueDay, setEditDueDay] = useState(tenant.dueDay);
   const [editNotes, setEditNotes] = useState(tenant.notes || '');
   const [reminderWarning, setReminderWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditPhone(tenant.phone);
+    setEditEmail(tenant.email);
+    setEditPropertyType(tenant.propertyType || 'Flat');
+    setEditRent(tenant.rentAmount);
+    setEditDueDay(tenant.dueDay);
+    setEditNotes(tenant.notes || '');
+  }, [tenant]);
 
   if (!isOpen) return null;
 
@@ -301,6 +312,7 @@ export default function TenantDetailModal({
       ...tenant,
       phone: editPhone.trim(),
       email: editEmail.trim(),
+      propertyType: editPropertyType,
       rentAmount: Number(editRent),
       dueDay: Number(editDueDay),
       notes: editNotes.trim(),
@@ -364,6 +376,11 @@ export default function TenantDetailModal({
               <p className="text-sm text-slate-300 flex items-center gap-2">
                 <Home className="w-4 h-4 text-amber-400" />
                 <span>{tenant.unit}</span>
+                {tenant.propertyType && (
+                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    {tenant.propertyType}
+                  </span>
+                )}
               </p>
             </div>
             <button
@@ -892,6 +909,32 @@ export default function TenantDetailModal({
               </div>
 
               <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-4 text-xs">
+                <div className="grid grid-cols-2 gap-4 pb-3 border-b border-slate-100">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Property Type (प्रकार)</label>
+                    {isEditingProfile ? (
+                      <select
+                        value={editPropertyType}
+                        onChange={(e) => setEditPropertyType(e.target.value as PropertyType)}
+                        className="w-full px-2.5 py-1.5 border rounded-md border-slate-300 focus:ring-1 focus:ring-amber-500 bg-white font-medium text-slate-900"
+                      >
+                        <option value="Flat">Flat (फ्लैट - Apartment)</option>
+                        <option value="Duplex">Duplex (डुप्लेक्स - House / Villa)</option>
+                        <option value="Shop">Shop (दुकान - Commercial)</option>
+                        <option value="Godown">Godown (गोदाम - Storage / Warehouse)</option>
+                      </select>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded text-xs">
+                        {tenant.propertyType || 'Flat'}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 font-semibold mb-1">Makaan / Unit No.</span>
+                    <span className="font-bold text-slate-900">{tenant.unit}</span>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">Mobile (WhatsApp Reminder)</label>

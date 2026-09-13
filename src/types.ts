@@ -9,13 +9,18 @@ export interface LeaseDocument {
   notes?: string;
 }
 
+export type PropertyType = 'Flat' | 'Duplex' | 'Shop' | 'Godown';
+
+export const PROPERTY_TYPES: PropertyType[] = ['Flat', 'Duplex', 'Shop', 'Godown'];
+
 export interface Tenant {
   id: string;
   ownerId?: string;
   name: string;
   phone: string; // Mobile number (e.g. +1... or +91...)
   email: string;
-  unit: string; // e.g. "Apartment 302", "Villa 12", "Suite 4B"
+  propertyType?: PropertyType; // Flat, Duplex, Shop, Godown
+  unit: string; // e.g. "Flat 302", "Shop 4B", "Godown #2"
   rentAmount: number;
   securityDeposit: number;
   dueDay: number; // 1 - 31 (e.g. 1st or 5th of every month)

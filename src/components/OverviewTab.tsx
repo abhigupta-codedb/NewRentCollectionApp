@@ -299,6 +299,9 @@ export default function OverviewTab({
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-500">
                         <span className="font-semibold text-slate-700">{tenant.unit}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-900 text-[10px] font-bold border border-amber-200">
+                          {tenant.propertyType || 'Flat'}
+                        </span>
                         <span>•</span>
                         <span>Mobile: {tenant.phone}</span>
                       </div>

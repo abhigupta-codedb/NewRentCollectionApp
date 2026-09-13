@@ -383,11 +383,18 @@ export default function RemindersTab({
                             {candidate.reason === 'overdue' ? `Bakaya: ${candidate.daysInfo}` : candidate.reason === 'due_today' ? 'Aaj Due Hai' : `${candidate.daysInfo} bache hain`}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {candidate.tenant.unit} • Kiraya Tareekh:{' '}
-                          <strong className="text-slate-800 font-bold">
-                            {candidate.balanceInfo.currentMonthDueDate}
-                          </strong>
+                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-800">{candidate.tenant.unit}</span>
+                          <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-900 text-[10px] font-bold border border-amber-200">
+                            {candidate.tenant.propertyType || 'Flat'}
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Kiraya Tareekh:{' '}
+                            <strong className="text-slate-800 font-bold">
+                              {candidate.balanceInfo.currentMonthDueDate}
+                            </strong>
+                          </span>
                         </p>
                       </div>
 
@@ -544,6 +551,7 @@ export default function RemindersTab({
                     {[
                       '{tenant_name}',
                       '{unit}',
+                      '{property_type}',
                       '{amount}',
                       '{due_date}',
                       '{outstanding}',
